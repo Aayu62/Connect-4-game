@@ -21,14 +21,13 @@ This repository hosts a terminal-based implementation of the Connect 4 game, bui
 
 2.  **Navigate to the game directory:**
     ```bash
-    cd Connect4-Terminal
+    cd Connect-4-game
     ```
 
 3.  **Run the game:**
     ```bash
-    python connect4.py
+    python play.py
     ```
-    (Assuming your main game file is named `connect4.py`.)
 
 ### Future Enhancements
 
