@@ -21,7 +21,7 @@ This repository hosts a terminal-based implementation of the Connect 4 game, bui
 
 2.  **Navigate to the game directory:**
     ```bash
-    cd Connect-4-game
+    cd Connect4
     ```
 
 3.  **Run the game:**
