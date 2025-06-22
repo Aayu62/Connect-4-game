@@ -24,11 +24,18 @@ This repository hosts a terminal-based implementation of the Connect 4 game, bui
     cd Connect4
     ```
 
-3.  **Run the game:**
+3.  **Run the game (USER INTERFACE):**
     ```bash
-    python play.py
+    python gui.py
     ```
-
+    OR
+    
+    **Run the game (On Terminal):**
+    ```bash
+    python Play.py
+    ```
+    
+    
 ### Future Enhancements
 
 I'm continuously working on improving the game, with a primary focus on:
