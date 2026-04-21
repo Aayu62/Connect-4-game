@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Connect 4</title>
+</head>
+<body>
+
+<h1>Connect 4</h1>
+
+<div id="board"></div>
+<button onclick="restartGame()" style="margin-bottom:10px;">
+    🔄 Restart Game
+</button>
+
+<script>
+let board = [];
+
+function startGame() {
+    fetch('/start/')
+    .then(res => res.json())
+    .then(data => {
+        board = data.board;
+        renderBoard();
+    });
+}
+
+function makeMove(col) {
+    fetch('/move/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ col: col })
+    })
+    .then(res => res.json())
+    .then(data => {
+
+        if (data.error) {
+            alert(data.error);
+            return;
+        }
+
+        board = data.board;
+        renderBoard();
+
+        if (data.winner) {
+            alert(data.winner + " wins!");
+        }
+    });
+}
+
+function renderBoard() {
+    let html = "";
+
+    for (let r = 0; r < board.length; r++) {
+        for (let c = 0; c < board[0].length; c++) {
+
+            let cell = board[r][c] == 0 ? "⚪" :
+                       board[r][c] == 1 ? "🔴" : "🟡";
+
+            html += `<button onclick="makeMove(${c})" style="width:50px;height:50px;font-size:20px">${cell}</button>`;
+        }
+        html += "<br>";
+    }
+
+    document.getElementById("board").innerHTML = html;
+}
+function restartGame() {
+    fetch('/restart/', {
+        method: 'POST'
+    })
+    .then(res => res.json())
+    .then(data => {
+        board = data.board;
+        renderBoard();
+    });
+}
+
+startGame();
+</script>
+
+</body>
+</html>
