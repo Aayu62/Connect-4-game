@@ -2,9 +2,8 @@ import json
 import numpy as np
 from django.http import JsonResponse
 from django.shortcuts import render
-from .Connect_4 import *
+from .Connect_4 import create_board, drop_pieces, valid_move, is_winning, is_draw
 from .agent import minimax_agent
-from django.views.decorators.csrf import csrf_exempt
 
 
 ROWS = 6
@@ -17,37 +16,22 @@ def home(request):
 
 def start_game(request):
     board = create_board(ROWS, COLUMNS)
-
-    # convert to list (important)
     board_list = board.tolist()
-
     request.session['board'] = board_list
+    return JsonResponse({"message": "Game started", "board": board_list})
 
-    return JsonResponse({
-        "message": "Game started",
-        "board": board_list
-    })
 
-@csrf_exempt
 def restart_game(request):
     board = create_board(ROWS, COLUMNS)
     request.session['board'] = board.tolist()
+    return JsonResponse({"message": "Game restarted", "board": board.tolist()})
 
-    return JsonResponse({
-        "message": "Game restarted",
-        "board": board.tolist()
-    })
 
-@csrf_exempt
 def player_move(request):
-    import json
     data = json.loads(request.body)
     col = data.get("col")
-
-    import numpy as np
     board = np.array(request.session.get('board'))
 
-    # Player move
     if not valid_move(board, col):
         return JsonResponse({"error": "Invalid move"})
 
@@ -57,7 +41,10 @@ def player_move(request):
         request.session['board'] = board.tolist()
         return JsonResponse({"board": board.tolist(), "winner": "You"})
 
-    # AI move
+    if is_draw(board):
+        request.session['board'] = board.tolist()
+        return JsonResponse({"board": board.tolist(), "winner": "Draw"})
+
     agent_col = minimax_agent(board, 2)
     drop_pieces(board, agent_col, 2)
 
@@ -65,9 +52,9 @@ def player_move(request):
         request.session['board'] = board.tolist()
         return JsonResponse({"board": board.tolist(), "winner": "AI"})
 
-    request.session['board'] = board.tolist()
+    if is_draw(board):
+        request.session['board'] = board.tolist()
+        return JsonResponse({"board": board.tolist(), "winner": "Draw"})
 
-    return JsonResponse({
-        "board": board.tolist(),
-        "agent_move": agent_col
-    })
+    request.session['board'] = board.tolist()
+    return JsonResponse({"board": board.tolist(), "agent_move": agent_col})

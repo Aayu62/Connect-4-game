@@ -4,6 +4,7 @@
     <title>Connect 4</title>
 </head>
 <body>
+<form>{% csrf_token %}</form>
 
 <h1>Connect 4</h1>
 
@@ -24,11 +25,17 @@ function startGame() {
     });
 }
 
+function getCookie(name) {
+    const match = document.cookie.match(new RegExp('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)'));
+    return match ? match.pop() : '';
+}
+
 function makeMove(col) {
     fetch('/move/', {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
         },
         body: JSON.stringify({ col: col })
     })
@@ -44,7 +51,11 @@ function makeMove(col) {
         renderBoard();
 
         if (data.winner) {
-            alert(data.winner + " wins!");
+            if (data.winner === "Draw") {
+                alert("It's a draw!");
+            } else {
+                alert(data.winner + " wins!");
+            }
         }
     });
 }
@@ -67,7 +78,8 @@ function renderBoard() {
 }
 function restartGame() {
     fetch('/restart/', {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') }
     })
     .then(res => res.json())
     .then(data => {

@@ -1,10 +1,8 @@
 import numpy as np
 
-#Create an empty board
-def create_board(rows,column):
+def create_board(rows, column):
     return np.zeros((rows, column), dtype=int)
 
-#Function to drop pieces
 def drop_pieces(board, column, mark):
     for row in range(board.shape[0]-1, -1, -1):
         if board[row][column] == 0:
@@ -18,8 +16,9 @@ def valid_move(board, col):
             return True
     return False
 
+def is_draw(board):
+    return all(board[0][c] != 0 for c in range(board.shape[1]))
 
-#Function to print board
 def print_board(board):
     print(board)
     print("\n")
@@ -53,29 +52,3 @@ def is_winning(board, mark):
             if window.count(mark) == 4:
                 return True
     return False
-
-
-def play_game(agent1,agent2,board):
-    game_over = False
-    turn = 1
-
-    print("GAME STARTS")
-    while not game_over:
-        print_board(board)
-        print("\n"+str(turn))
-        if turn == 1:
-            col = int(input("Chose your move(1-" + str(board.shape[1])+ "):"))-1
-        else:
-            col = agent2(board, 2)
-        
-        if valid_move(board, col):
-            drop_pieces(board,col,turn)
-
-            if is_winning(board, turn):
-                print_board(board)
-                print(f"""{"YOU" if turn == 1 else "Agent"} WINS!!""")
-                break
-        else :
-            print("Enter a Valid move!!!")
-            continue
-        turn = turn%2 + 1
