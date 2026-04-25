@@ -6,4 +6,5 @@ urlpatterns = [
     path('start/', views.start_game),
     path('move/', views.player_move),
     path('restart/', views.restart_game),
+    path('ai-first/', views.ai_first_move),
 ]

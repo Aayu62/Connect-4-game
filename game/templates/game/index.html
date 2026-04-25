@@ -1,95 +1,496 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Connect 4</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: #0f0f1a;
+            color: #fff;
+            font-family: 'Segoe UI', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 24px 16px;
+        }
+
+        h1 {
+            font-size: 2.4rem;
+            font-weight: 800;
+            letter-spacing: 2px;
+            background: linear-gradient(90deg, #e74c3c, #f1c40f);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 6px;
+        }
+
+        .subtitle {
+            color: #888;
+            font-size: 0.85rem;
+            margin-bottom: 20px;
+            letter-spacing: 1px;
+        }
+
+        /* Score board */
+        .scoreboard {
+            display: flex;
+            gap: 32px;
+            margin-bottom: 20px;
+        }
+
+        .score-card {
+            text-align: center;
+            background: #1a1a2e;
+            border-radius: 12px;
+            padding: 10px 24px;
+            border: 2px solid #2a2a4a;
+            min-width: 90px;
+        }
+
+        .score-card.you  { border-color: #e74c3c44; }
+        .score-card.ai   { border-color: #f1c40f44; }
+        .score-card.draw { border-color: #55555588; }
+
+        .score-label {
+            font-size: 0.7rem;
+            letter-spacing: 1px;
+            color: #888;
+            text-transform: uppercase;
+        }
+
+        .score-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+        .score-card.you  .score-value { color: #e74c3c; }
+        .score-card.ai   .score-value { color: #f1c40f; }
+        .score-card.draw .score-value { color: #aaa; }
+
+        /* Status bar */
+        #status {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            height: 28px;
+            letter-spacing: 0.5px;
+            transition: color 0.3s;
+        }
+
+        /* Column hover arrows */
+        .arrow-row {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 4px;
+        }
+
+        .arrow-btn {
+            width: 54px;
+            height: 28px;
+            background: transparent;
+            border: none;
+            color: #555;
+            font-size: 1.1rem;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: color 0.2s, background 0.2s;
+        }
+
+        .arrow-btn:hover { color: #e74c3c; background: #e74c3c18; }
+        .arrow-btn.disabled { pointer-events: none; color: #333; }
+
+        /* Board */
+        .board-wrapper {
+            background: #1a237e;
+            border-radius: 16px;
+            padding: 10px;
+            box-shadow: 0 8px 40px #0008, 0 0 0 4px #283593;
+        }
+
+        .board-row { display: flex; gap: 6px; margin-bottom: 6px; }
+        .board-row:last-child { margin-bottom: 0; }
+
+        .cell {
+            width: 54px;
+            height: 54px;
+            border-radius: 50%;
+            background: #0f0f1a;
+            box-shadow: inset 0 4px 8px #0006;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cell.p1 { background: radial-gradient(circle at 35% 35%, #ff6b6b, #c0392b); box-shadow: 0 0 12px #e74c3c66, inset 0 2px 4px #fff3; }
+        .cell.p2 { background: radial-gradient(circle at 35% 35%, #ffe066, #d4ac0d); box-shadow: 0 0 12px #f1c40f66, inset 0 2px 4px #fff3; }
+
+        .cell.drop-anim { animation: drop 0.3s ease-out; }
+
+        @keyframes drop {
+            from { transform: translateY(-320px); }
+            to   { transform: translateY(0); }
+        }
+
+        .cell.win-flash { animation: flash 0.6s ease-in-out infinite alternate; }
+
+        @keyframes flash {
+            from { box-shadow: 0 0 8px #fff4; }
+            to   { box-shadow: 0 0 24px #fff, 0 0 40px currentColor; }
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 10px 22px;
+            border: none;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            letter-spacing: 0.5px;
+            transition: transform 0.15s, opacity 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover  { transform: translateY(-2px); box-shadow: 0 4px 16px #0006; }
+        .btn:active { transform: translateY(0); }
+
+        .btn-restart  { background: #27ae60; color: #fff; }
+        .btn-ai-first { background: #8e44ad; color: #fff; }
+        .btn-you-first { background: #2980b9; color: #fff; }
+
+        .btn.active-mode { outline: 3px solid #fff6; }
+
+        /* Winner overlay */
+        #overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: #000a;
+            z-index: 10;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        #overlay.show { display: flex; }
+
+        .overlay-box {
+            background: #1a1a2e;
+            border-radius: 20px;
+            padding: 40px 56px;
+            text-align: center;
+            border: 2px solid #333;
+            box-shadow: 0 8px 48px #000c;
+            position: relative;
+        }
+
+        .overlay-close {
+            position: absolute;
+            top: 12px;
+            right: 16px;
+            background: transparent;
+            border: none;
+            color: #666;
+            font-size: 1.4rem;
+            cursor: pointer;
+            line-height: 1;
+            transition: color 0.2s;
+        }
+
+        .overlay-close:hover { color: #fff; }
+
+        .overlay-emoji { font-size: 3.5rem; margin-bottom: 10px; }
+        .overlay-title { font-size: 2rem; font-weight: 800; margin-bottom: 6px; }
+        .overlay-sub   { color: #888; font-size: 0.9rem; margin-bottom: 24px; }
+
+        .btn-play-again {
+            background: linear-gradient(90deg, #e74c3c, #f1c40f);
+            color: #fff;
+            font-size: 1rem;
+            padding: 12px 32px;
+            border-radius: 12px;
+            border: none;
+            cursor: pointer;
+            font-weight: 700;
+            transition: transform 0.15s;
+        }
+
+        .btn-play-again:hover { transform: scale(1.05); }
+
+        /* Thinking indicator */
+        #thinking {
+            display: none;
+            color: #f1c40f;
+            font-size: 0.85rem;
+            margin-top: 8px;
+            letter-spacing: 1px;
+        }
+
+        #thinking.show { display: block; }
+
+        .dot-anim::after {
+            content: '';
+            animation: dots 1.2s steps(4, end) infinite;
+        }
+
+        @keyframes dots {
+            0%   { content: ''; }
+            25%  { content: '.'; }
+            50%  { content: '..'; }
+            75%  { content: '...'; }
+        }
+    </style>
 </head>
 <body>
-<form>{% csrf_token %}</form>
+<form style="display:none">{% csrf_token %}</form>
 
-<h1>Connect 4</h1>
+<h1>CONNECT 4</h1>
+<p class="subtitle">Human vs AI · Minimax + Neural Network</p>
 
-<div id="board"></div>
-<button onclick="restartGame()" style="margin-bottom:10px;">
-    🔄 Restart Game
-</button>
+<div class="scoreboard">
+    <div class="score-card you">
+        <div class="score-label">🔴 You</div>
+        <div class="score-value" id="score-you">0</div>
+    </div>
+    <div class="score-card draw">
+        <div class="score-label">Draw</div>
+        <div class="score-value" id="score-draw">0</div>
+    </div>
+    <div class="score-card ai">
+        <div class="score-label">🟡 AI</div>
+        <div class="score-value" id="score-ai">0</div>
+    </div>
+</div>
+
+<div id="status">Your turn 🔴</div>
+<div id="thinking" class="dot-anim">AI is thinking</div>
+
+<div class="arrow-row" id="arrows"></div>
+
+<div class="board-wrapper">
+    <div id="board"></div>
+</div>
+
+<div class="controls">
+    <button class="btn btn-you-first active-mode" id="btn-you" onclick="newGame(false)">▶ You First</button>
+    <button class="btn btn-ai-first" id="btn-ai" onclick="newGame(true)">🤖 AI First</button>
+    <button class="btn btn-restart" onclick="newGame(aiGoesFirst)">🔄 Restart</button>
+</div>
+
+<!-- Winner overlay -->
+<div id="overlay">
+    <div class="overlay-box">
+        <button class="overlay-close" onclick="closeOverlay()" title="View board">✕</button>
+        <div class="overlay-emoji" id="overlay-emoji"></div>
+        <div class="overlay-title" id="overlay-title"></div>
+        <div class="overlay-sub" id="overlay-sub"></div>
+        <button class="btn-play-again" onclick="newGame(aiGoesFirst)">Play Again</button>
+    </div>
+</div>
 
 <script>
 let board = [];
-
-function startGame() {
-    fetch('/start/')
-    .then(res => res.json())
-    .then(data => {
-        board = data.board;
-        renderBoard();
-    });
-}
+let gameOver = false;
+let aiGoesFirst = false;
+let scores = { you: 0, ai: 0, draw: 0 };
 
 function getCookie(name) {
     const match = document.cookie.match(new RegExp('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)'));
     return match ? match.pop() : '';
 }
 
-function makeMove(col) {
-    fetch('/move/', {
+function post(url, body) {
+    return fetch(url, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCookie('csrftoken')
-        },
-        body: JSON.stringify({ col: col })
-    })
-    .then(res => res.json())
-    .then(data => {
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+        body: JSON.stringify(body)
+    }).then(r => r.json());
+}
 
+// ── New game ──────────────────────────────────────────────────────────────────
+function newGame(aiFirst) {
+    aiGoesFirst = aiFirst;
+    gameOver = false;
+    document.getElementById('overlay').classList.remove('show');
+    setStatus(aiFirst ? 'AI is thinking 🟡' : 'Your turn 🔴');
+
+    // highlight active mode button
+    document.getElementById('btn-you').classList.toggle('active-mode', !aiFirst);
+    document.getElementById('btn-ai').classList.toggle('active-mode', aiFirst);
+
+    if (aiFirst) {
+        setThinking(true);
+        post('/ai-first/', {}).then(data => {
+            board = data.board;
+            renderBoard(data.agent_move !== undefined ? [data.agent_move] : []);
+            setThinking(false);
+            setStatus('Your turn 🔴');
+        });
+    } else {
+        fetch('/start/').then(r => r.json()).then(data => {
+            board = data.board;
+            renderBoard();
+        });
+    }
+}
+
+// ── Player move ───────────────────────────────────────────────────────────────
+function makeMove(col) {
+    if (gameOver) return;
+    setBoardClickable(false);
+
+    const playerMark = aiGoesFirst ? 2 : 1;
+    let landingRow = -1;
+    for (let r = board.length - 1; r >= 0; r--) {
+        if (board[r][col] === 0) { landingRow = r; break; }
+    }
+    if (landingRow === -1) {
+        setBoardClickable(true);
+        setStatus('Invalid move — try another column');
+        return;
+    }
+    board[landingRow][col] = playerMark;
+    renderBoard([col]);
+
+    setThinking(true);
+    setStatus('AI is thinking 🟡');
+
+    post('/move/', { col }).then(data => {
         if (data.error) {
-            alert(data.error);
+            board[landingRow][col] = 0;
+            renderBoard();
+            setStatus('Invalid move — try another column');
+            setBoardClickable(true);
+            setThinking(false);
             return;
         }
 
+        const aiCol = data.agent_move !== undefined ? data.agent_move : null;
         board = data.board;
-        renderBoard();
+        renderBoard(aiCol !== null ? [aiCol] : []);
+        setThinking(false);
 
         if (data.winner) {
-            if (data.winner === "Draw") {
-                alert("It's a draw!");
-            } else {
-                alert(data.winner + " wins!");
-            }
+            handleWinner(data.winner);
+        } else {
+            setStatus('Your turn 🔴');
+            setBoardClickable(true);
         }
     });
 }
 
-function renderBoard() {
-    let html = "";
+// ── Render ────────────────────────────────────────────────────────────────────
+function cellClass(val) {
+    if (val === 0) return 'cell';
+    const playerMark = aiGoesFirst ? 2 : 1;
+    const aiMark     = aiGoesFirst ? 1 : 2;
+    // p1 = red = human, p2 = yellow = AI (always, regardless of mark number)
+    if (val === playerMark) return 'cell p1';  // human = red
+    if (val === aiMark)     return 'cell p2';  // AI = yellow
+    return 'cell';
+}
 
-    for (let r = 0; r < board.length; r++) {
-        for (let c = 0; c < board[0].length; c++) {
+function renderBoard(animCols = []) {
+    const boardEl = document.getElementById('board');
+    const isFirstRender = boardEl.children.length === 0;
 
-            let cell = board[r][c] == 0 ? "⚪" :
-                       board[r][c] == 1 ? "🔴" : "🟡";
-
-            html += `<button onclick="makeMove(${c})" style="width:50px;height:50px;font-size:20px">${cell}</button>`;
+    // find bottom-most filled row per animated column
+    const animRows = {};
+    for (const c of animCols) {
+        for (let r = board.length - 1; r >= 0; r--) {
+            if (board[r][c] !== 0) { animRows[c] = r; break; }
         }
-        html += "<br>";
     }
 
-    document.getElementById("board").innerHTML = html;
+    if (isFirstRender) {
+        for (let r = 0; r < board.length; r++) {
+            const row = document.createElement('div');
+            row.className = 'board-row';
+            for (let c = 0; c < board[0].length; c++) {
+                const cell = document.createElement('div');
+                cell.className = cellClass(board[r][c]);
+                if (animRows[c] === r) cell.classList.add('drop-anim');
+                row.appendChild(cell);
+            }
+            boardEl.appendChild(row);
+        }
+        buildArrows();
+    } else {
+        // patch ONLY cells that changed — never touch existing correct cells
+        for (let r = 0; r < board.length; r++) {
+            const rowEl = boardEl.children[r];
+            for (let c = 0; c < board[0].length; c++) {
+                const cell = rowEl.children[c];
+                const desired = cellClass(board[r][c]);
+                const current = cell.className.replace(' drop-anim', '').trim();
+                if (current !== desired) {
+                    cell.className = desired;
+                    if (animRows[c] === r) cell.classList.add('drop-anim');
+                }
+            }
+        }
+        // don't rebuild arrows here — only update clickability
+    }
 }
-function restartGame() {
-    fetch('/restart/', {
-        method: 'POST',
-        headers: { 'X-CSRFToken': getCookie('csrftoken') }
-    })
-    .then(res => res.json())
-    .then(data => {
-        board = data.board;
-        renderBoard();
+
+function buildArrows() {
+    const arrowRow = document.getElementById('arrows');
+    arrowRow.innerHTML = '';
+    for (let c = 0; c < 7; c++) {
+        const btn = document.createElement('button');
+        btn.className = 'arrow-btn' + (gameOver ? ' disabled' : '');
+        btn.textContent = '▼';
+        btn.onclick = () => makeMove(c);
+        arrowRow.appendChild(btn);
+    }
+}
+
+// ── Winner handling ───────────────────────────────────────────────────────────
+function handleWinner(winner) {
+    gameOver = true;
+    setBoardClickable(false);
+    buildArrows();
+
+    const emoji = { You: '🎉', AI: '🤖', Draw: '🤝' };
+    const title = { You: 'You Win!', AI: 'AI Wins!', Draw: "It's a Draw!" };
+    const sub   = { You: 'Great move! You beat the AI.', AI: 'The AI outplayed you this time.', Draw: 'Nobody wins — perfectly balanced.' };
+
+    if (winner === 'You')  { scores.you++;  document.getElementById('score-you').textContent  = scores.you; }
+    if (winner === 'AI')   { scores.ai++;   document.getElementById('score-ai').textContent   = scores.ai; }
+    if (winner === 'Draw') { scores.draw++; document.getElementById('score-draw').textContent = scores.draw; }
+
+    document.getElementById('overlay-emoji').textContent = emoji[winner];
+    document.getElementById('overlay-title').textContent = title[winner];
+    document.getElementById('overlay-sub').textContent   = sub[winner];
+    document.getElementById('overlay').classList.add('show');
+    setStatus('Game over');
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function closeOverlay() { document.getElementById('overlay').classList.remove('show'); }
+function setStatus(msg)  { document.getElementById('status').textContent = msg; }
+function setThinking(on) { document.getElementById('thinking').classList.toggle('show', on); }
+
+function setBoardClickable(on) {
+    document.querySelectorAll('.arrow-btn').forEach(b => {
+        b.classList.toggle('disabled', !on);
+        b.style.pointerEvents = on ? '' : 'none';
     });
 }
 
-startGame();
+// ── Init ──────────────────────────────────────────────────────────────────────
+newGame(false);
 </script>
-
 </body>
 </html>
