@@ -1,185 +1,176 @@
+"""
+game/agent.py  —  Stage 4 (v2): ML-powered Minimax with canonical encoding
+===========================================================================
+Fix over v1: encode_board now always encodes from the CURRENT player's
+perspective, matching how the model was trained.
+"""
+
 import random
 import math
+import os
+import numpy as np
+import torch
+import torch.nn as nn
 from .Connect_4 import drop_pieces, valid_move, is_winning
 
+class ValueNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(42, 128), nn.ReLU(), nn.Dropout(0.3),
+            nn.Linear(128, 64),  nn.ReLU(), nn.Dropout(0.3),
+            nn.Linear(64, 1),    nn.Tanh()
+        )
+    def forward(self, x):
+        return self.net(x).squeeze(-1)
 
-# ──────────────────────────────────────────────
-#  Heuristic evaluation (unchanged from before)
-# ──────────────────────────────────────────────
 
+#Singleton model loader
+_model = None
+
+def load_model(path="data/value_net.pt"):
+    global _model
+    if _model is not None:
+        return _model
+    if not os.path.exists(path):
+        print(f"[agent] WARNING: {path} not found. Using heuristic fallback.")
+        return None
+    checkpoint = torch.load(path, map_location="cpu", weights_only=True)
+    net = ValueNet()
+    net.load_state_dict(checkpoint['model_state_dict'])
+    net.eval()
+    _model = net
+    print(f"[agent] ValueNet loaded from {path}")
+    return _model
+
+
+#Canonical board encoding
+def encode_board(board, current_player):
+    """
+    Encode from the CURRENT PLAYER's perspective — always sees itself as +1.
+    Must match generate_data.py encoding exactly.
+      Current player's piece  -> +1.0
+      Opponent's piece        -> -1.0
+      Empty                   ->  0.0
+    """
+    opp = 2 if current_player == 1 else 1
+    encoded = np.zeros(42, dtype=np.float32)
+    for r in range(6):
+        for c in range(7):
+            idx = r * 7 + c
+            if board[r][c] == current_player:
+                encoded[idx] =  1.0
+            elif board[r][c] == opp:
+                encoded[idx] = -1.0
+    return encoded
+
+
+#Evaluation
+def evaluate_board(board, mark, model):
+    """
+    Score the board for the player whose turn it is (mark).
+    Model output is already from current player's perspective (+1 = good for me).
+    No sign flip needed — canonical encoding handles perspective automatically.
+    """
+    if model is not None:
+        enc    = encode_board(board, current_player=mark)
+        tensor = torch.tensor(enc, dtype=torch.float32).unsqueeze(0)
+        with torch.no_grad():
+            score = model(tensor).item()
+        return score * 100.0   # scale to match win/loss magnitude
+    else:
+        return score_position(board, mark)
+
+
+#Heuristic fallback
 def evaluate_window(window, mark):
     score = 0
-    opp_mark = 1 if mark == 2 else 2
-
-    if window.count(mark) == 4:
-        score += 100
-    elif window.count(mark) == 3 and window.count(0) == 1:
-        score += 5
-    elif window.count(mark) == 2 and window.count(0) == 2:
-        score += 2
-
-    if window.count(opp_mark) == 3 and window.count(0) == 1:
-        score -= 4
-
+    opp = 1 if mark == 2 else 2
+    if window.count(mark) == 4:       score += 100
+    elif window.count(mark) == 3 and window.count(0) == 1: score += 5
+    elif window.count(mark) == 2 and window.count(0) == 2: score += 2
+    if window.count(opp) == 3 and window.count(0) == 1:   score -= 4
     return score
-
 
 def score_position(board, mark):
     score = 0
     rows, cols = board.shape
-
-    # Center column preference
-    center = cols // 2
-    center_array = list(board[:, center])
-    score += center_array.count(mark) * 3
-
-    # Horizontal
+    score += list(board[:, cols//2]).count(mark) * 3
     for r in range(rows):
-        row_array = list(board[r, :])
+        row = list(board[r, :])
         for c in range(cols - 3):
-            score += evaluate_window(row_array[c:c+4], mark)
-
-    # Vertical
+            score += evaluate_window(row[c:c+4], mark)
     for c in range(cols):
-        col_array = list(board[:, c])
+        col = list(board[:, c])
         for r in range(rows - 3):
-            score += evaluate_window(col_array[r:r+4], mark)
-
-    # Diagonal \
+            score += evaluate_window(col[r:r+4], mark)
     for r in range(rows - 3):
         for c in range(cols - 3):
-            window = [board[r+i][c+i] for i in range(4)]
-            score += evaluate_window(window, mark)
-
-    # Diagonal /
+            score += evaluate_window([board[r+i][c+i] for i in range(4)], mark)
     for r in range(rows - 3):
         for c in range(3, cols):
-            window = [board[r+i][c-i] for i in range(4)]
-            score += evaluate_window(window, mark)
-
+            score += evaluate_window([board[r+i][c-i] for i in range(4)], mark)
     return score
 
 
-# ──────────────────────────────────────────────
-#  Move ordering: center columns first
-#  This is the key enabler for alpha-beta pruning.
-#  Better moves explored first → more branches cut.
-# ──────────────────────────────────────────────
-
-def get_ordered_moves(board):
-    """
-    Returns valid columns sorted by distance from center.
-    Center-first ordering dramatically improves alpha-beta cutoffs
-    because stronger moves are explored first.
-    """
+#Move ordering
+def get_ordered_moves(board, mark=None, model=None):
     cols = board.shape[1]
-    center = cols // 2
     valid_cols = [c for c in range(cols) if valid_move(board, c)]
-    # Sort by absolute distance from center (ascending)
-    return sorted(valid_cols, key=lambda c: abs(center - c))
+
+    if model is not None and mark is not None and len(valid_cols) > 1:
+        scores = []
+        for col in valid_cols:
+            tmp = board.copy()
+            drop_pieces(tmp, col, mark)
+            enc = encode_board(tmp, current_player=mark)
+            t   = torch.tensor(enc, dtype=torch.float32).unsqueeze(0)
+            with torch.no_grad():
+                s = model(t).item()
+            scores.append((col, s))
+        scores.sort(key=lambda x: x[1], reverse=True)
+        return [c for c, _ in scores]
+    else:
+        center = cols // 2
+        return sorted(valid_cols, key=lambda c: abs(center - c))
 
 
-# ──────────────────────────────────────────────
-#  Minimax with Alpha-Beta Pruning
-#
-#  Alpha: best score the MAXIMIZER can guarantee so far
-#  Beta:  best score the MINIMIZER can guarantee so far
-#
-#  Pruning rule:
-#    - If current node's value >= beta  → maximizer won't pick this path
-#      (minimizer above already has something better) → prune (β cut-off)
-#    - If current node's value <= alpha → minimizer won't pick this path
-#      (maximizer above already has something better) → prune (α cut-off)
-#
-#  Result: same output as plain minimax, but skips large parts of the tree.
-#  At depth 5 with good move ordering this is ~10x faster than plain minimax.
-# ──────────────────────────────────────────────
+#Minimax with alpha-beta
+def minimax_ab(board, depth, alpha, beta, maximizing, mark, model):
+    opp = 1 if mark == 2 else 2
+    valid_cols = get_ordered_moves(board, mark=mark, model=model)
 
-def minimax_ab(board, depth, alpha, beta, maximizing, mark):
-    """
-    Args:
-        board       : current numpy board state
-        depth       : remaining search depth
-        alpha       : best score maximizer can guarantee (start: -inf)
-        beta        : best score minimizer can guarantee (start: +inf)
-        maximizing  : True if it's the AI's turn
-        mark        : AI's piece value (1 or 2)
+    if is_winning(board, mark):   return None,  1_000_000 + depth
+    if is_winning(board, opp):    return None, -(1_000_000 + depth)
+    if not valid_cols:            return None, 0
+    if depth == 0:                return None, evaluate_board(board, mark, model)
 
-    Returns:
-        (best_col, best_score)
-    """
-    opp_mark = 1 if mark == 2 else 2
-    valid_cols = get_ordered_moves(board)
-
-    # ── Terminal state checks (ORDER MATTERS) ──
-    # Check wins BEFORE depth==0 so we don't miss a winning leaf
-    if is_winning(board, mark):
-        # Prefer winning sooner → reward higher score at greater depth
-        return None, 1_000_000 + depth
-
-    if is_winning(board, opp_mark):
-        return None, -(1_000_000 + depth)
-
-    if len(valid_cols) == 0:
-        return None, 0  # Draw
-
-    if depth == 0:
-        return None, score_position(board, mark)
-
-    # ── Recursive search ──
-    best_col = valid_cols[0]  # fallback (always valid due to move ordering)
-
+    best_col = valid_cols[0]
     if maximizing:
         value = -math.inf
-
         for col in valid_cols:
-            temp_board = board.copy()
-            drop_pieces(temp_board, col, mark)
-            _, new_score = minimax_ab(temp_board, depth - 1, alpha, beta, False, mark)
-
-            if new_score > value:
-                value = new_score
-                best_col = col
-
+            tmp = board.copy(); drop_pieces(tmp, col, mark)
+            _, s = minimax_ab(tmp, depth-1, alpha, beta, False, mark, model)
+            if s > value: value, best_col = s, col
             alpha = max(alpha, value)
-
-            # Beta cut-off: minimizer above won't allow this path
-            if alpha >= beta:
-                break
-
-    else:  # minimizing (opponent's turn)
+            if alpha >= beta: break
+    else:
         value = math.inf
-
         for col in valid_cols:
-            temp_board = board.copy()
-            drop_pieces(temp_board, col, opp_mark)
-            _, new_score = minimax_ab(temp_board, depth - 1, alpha, beta, True, mark)
-
-            if new_score < value:
-                value = new_score
-                best_col = col
-
+            tmp = board.copy(); drop_pieces(tmp, col, opp)
+            _, s = minimax_ab(tmp, depth-1, alpha, beta, True, mark, model)
+            if s < value: value, best_col = s, col
             beta = min(beta, value)
-
-            # Alpha cut-off: maximizer above won't allow this path
-            if alpha >= beta:
-                break
+            if alpha >= beta: break
 
     return best_col, value
 
-#  Public agent interface (used by views.py)
 
+#Public interface
 def minimax_agent(board, mark, depth=5):
-    """
-    Drop-in replacement for the old minimax_agent.
-    Depth 5 with alpha-beta is roughly equivalent in speed
-    to depth 4 plain minimax, but plays significantly stronger.
-    Raise to depth=6 if you want even stronger play.
-    """
-    col, _ = minimax_ab(board, depth, -math.inf, math.inf, True, mark)
+    model = load_model()
+    col, _ = minimax_ab(board, depth, -math.inf, math.inf, True, mark, model)
     return col
 
-
 def agent_random(board, mark):
-    """Kept for data generation and testing purposes."""
     return random.choice(range(board.shape[1]))
